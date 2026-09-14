@@ -2,77 +2,53 @@ import 'dotenv/config';
 import express from 'express';
 import { pool } from './db.js';
 import { applicationSchema, patchSchema } from './zod-validation.js'
+import { asyncHandler } from './asyncHandler.js';
+import { NotFoundError } from './errors.js';
+import { errorHandler } from './errorHandler.js';
+
 const app = express();
 app.use(express.json());
 
-app.post('/applications', async (req, res) => {
-  const { company, role, notes, source, source_url } = req.body;
-  const status = req.body.status ?? 'applied';
-  const date_applied = req.body.date_applied ?? new Date().toISOString().slice(0, 10);
+app.post('/applications', asyncHandler(async (req, res) => {
   const validation = applicationSchema.safeParse(req.body);
-  if(!validation.success) {
-    return res.status(400).json({ error: result.error.issues });
-  }	
+  if (!validation.success) {
+    return res.status(400).json({ error: validation.error.issues });
+  }
   const { company, role, status, date_applied, source, source_url, notes } = validation.data;
-  try {
-    const result = await pool.query(
-      `INSERT INTO applications (company, role, status, date_applied, source, source_url, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [company, role, status, date_applied, source, source_url, notes]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to create application' });
-  }
-});
 
-app.get('/applications', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM applications ORDER BY created_at DESC');
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch applications' });
-  }
-});
+  const result = await pool.query(
+    `INSERT INTO applications (company, role, status, date_applied, source, source_url, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [company, role, status, date_applied, source, source_url, notes]
+  );
+  res.status(201).json(result.rows[0]);
+}));
 
-app.get('/applications/:id', async (req, res) => {
+app.get('/applications', asyncHandler(async (req, res) => {
+  const result = await pool.query('SELECT * FROM applications ORDER BY created_at DESC');
+  res.json(result.rows);
+}));
+
+app.get('/applications/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const result = await pool.query('SELECT * FROM applications WHERE id = $1', [id]);
 
-  try {
-    const result = await pool.query('SELECT * FROM applications WHERE id = $1', [id]);
+  if (result.rows.length === 0) throw new NotFoundError('Application');
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
+  res.json(result.rows[0]);
+}));
 
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch application' });
-  }
-});
-
-app.delete('/applications/:id', async (req, res) => {
+app.delete('/applications/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const result = await pool.query('DELETE FROM applications WHERE id = $1 RETURNING *', [id]);
 
-  try {
-    const result = await pool.query('DELETE FROM applications WHERE id = $1 RETURNING *', [id]);
+  if (result.rows.length === 0) throw new NotFoundError('Application');
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
+  res.json({ deleted: result.rows[0] });
+}));
 
-    res.json({ deleted: result.rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to delete application' });
-  }
-});
-
-app.patch('/applications/:id', async (req, res) => {
+app.patch('/applications/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const validation = patchSchema.safeParse(req.body);
@@ -97,16 +73,16 @@ app.patch('/applications/:id', async (req, res) => {
     RETURNING *
   `;
 
-  try {
-    const result = await pool.query(query, values);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-    res.status(200).json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to update application' });
-  }
+  const result = await pool.query(query, values);
+  if (result.rows.length === 0) throw new NotFoundError('Application');
+
+  res.status(200).json(result.rows[0]);
+}));
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
 });
+
+app.use(errorHandler);
 
 app.listen(3000, () => console.log('Server running on port 3000'));
