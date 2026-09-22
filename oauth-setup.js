@@ -14,7 +14,7 @@ const oauth2Client = new google.auth.OAuth2(
   'http://localhost:3001/oauth2callback'
 );
 
-const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+const SCOPES = ['https://www.googleapis.com/auth/gmail.modify'];
 
 const authUrl = oauth2Client.generateAuthUrl({
   access_type: 'offline', // required to get a refresh token
