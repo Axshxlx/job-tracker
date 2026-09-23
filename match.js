@@ -81,4 +81,14 @@ export async function decideMatch({ company, role, status }) {
   const from = RANK[current] ?? -1;
   const to = RANK[status];
   if (to === undefined || to <= from) {
-    return flag(`would change status ${row.status} ->
+    return flag(`would change status ${row.status} -> ${status} on id ${id}`);
+  }
+  return { action: "patch", id, status, matchedRole: row.role };
+}
+
+export async function applyStatus(id, status) {
+  const r = await pool.query("UPDATE applications SET status = $1 WHERE id = $2", [status, id]);
+  if (r.rowCount === 0) throw new Error(`no row with id ${id}`);
+}
+
+export const closeDb = () => pool.end();
