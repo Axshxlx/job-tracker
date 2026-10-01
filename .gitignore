@@ -1,6 +1,5 @@
 node_modules/
 .env
-devlog.md
 token.json
 flagged.log
 
